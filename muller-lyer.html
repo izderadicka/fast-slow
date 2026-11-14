@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Müller-Lyer illusion</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f4ef;
+    --text: #22201c;
+    --muted: #6f6a60;
+    --card: #ffffff;
+    --border: #d9d4c8;
+    --accent: #b4521e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1a18;
+      --text: #ece8df;
+      --muted: #a09a8d;
+      --card: #262421;
+      --border: #3d3a34;
+      --accent: #f0935c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 48px;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, sans-serif;
+  }
+  main { max-width: 560px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin: 20px 0;
+  }
+  svg { display: block; width: 100%; height: auto; }
+  .figure { stroke: var(--text); stroke-width: 3; stroke-linecap: round; fill: none; }
+  .rulers { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .choices { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  button {
+    font: inherit;
+    color: inherit;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 18px;
+    cursor: pointer;
+  }
+  button.chosen { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Müller-Lyer illusion</h1>
+  <p class="muted">From <em>Thinking, Fast and Slow</em>, chapter 1 &ndash; an impression System 1 will not give up.</p>
+  <p>Look at the two horizontal lines. Which one is longer?</p>
+
+  <div class="card">
+    <svg viewBox="0 0 400 220" role="img" aria-label="Two horizontal lines with fins at their ends">
+      <!-- Both shafts run from x=100 to x=300; only the fins differ. -->
+      <g class="figure">
+        <path d="M100 70 H300 M122 48 L100 70 L122 92 M278 48 L300 70 L278 92"/>
+        <path d="M100 150 H300 M78 128 L100 150 L78 172 M322 128 L300 150 L322 172"/>
+      </g>
+      <g id="rulers" class="rulers" hidden>
+        <path d="M100 15 V205 M300 15 V205"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="choices">
+    <button data-choice="top">Top line</button>
+    <button data-choice="bottom">Bottom line</button>
+    <button data-choice="same">Same length</button>
+  </div>
+
+  <div id="reveal" hidden>
+    <p id="feedback"></p>
+    <p class="muted">The rulers show that both lines have exactly the same length. Now hide the rulers:
+       you know the lines are equal, yet the bottom one still looks longer. System 2 has the
+       belief, but it cannot stop System 1 from producing the illusion.</p>
+    <button id="reset">Hide rulers</button>
+  </div>
+</main>
+
+<script>
+const FEEDBACK = {
+  top: 'Unusual – most people see the bottom line as longer. In fact neither is.',
+  bottom: 'That is what almost everyone sees – and it is wrong.',
+  same: 'Correct – though you probably knew the illusion, rather than saw it.',
+};
+
+const rulers = document.getElementById('rulers');
+const reveal = document.getElementById('reveal');
+const feedback = document.getElementById('feedback');
+const choiceButtons = [...document.querySelectorAll('[data-choice]')];
+
+function showChoice(chosenButton) {
+  choiceButtons.forEach(button => button.classList.toggle('chosen', button === chosenButton));
+  const isRevealed = Boolean(chosenButton);
+  rulers.toggleAttribute('hidden', !isRevealed);
+  reveal.hidden = !isRevealed;
+  if (isRevealed) feedback.textContent = FEEDBACK[chosenButton.dataset.choice];
+}
+
+choiceButtons.forEach(button => button.addEventListener('click', () => showChoice(button)));
+document.getElementById('reset').addEventListener('click', () => showChoice());
+</script>
+</body>
+</html>
