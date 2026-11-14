@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conflict task</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f4ef;
+    --text: #22201c;
+    --muted: #6f6a60;
+    --card: #ffffff;
+    --border: #d9d4c8;
+    --accent: #b4521e;
+    --bad: #c62828;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1a18;
+      --text: #ece8df;
+      --muted: #a09a8d;
+      --card: #262421;
+      --border: #3d3a34;
+      --accent: #f0935c;
+      --bad: #ef7f7f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 48px;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, sans-serif;
+  }
+  main { max-width: 560px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  .stage {
+    position: relative;
+    height: 140px;
+    margin: 20px 0 16px;
+    padding: 0 12%;
+    display: flex;
+    align-items: center;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font: 600 clamp(1.8rem, 9vw, 2.6rem) system-ui, sans-serif;
+  }
+  /* Tick marking the centre the position is judged against. */
+  .stage::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    height: 14px;
+    border-left: 2px solid var(--border);
+  }
+  .stage.left { justify-content: flex-start; }
+  .stage.right { justify-content: flex-end; }
+  .stage.wrong { border-color: var(--bad); }
+  .buttons { display: flex; gap: 10px; margin-bottom: 16px; }
+  .buttons button { flex: 1; padding: 14px 8px; }
+  button {
+    font: inherit;
+    color: inherit;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 18px;
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin: 20px 0 16px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 4px; border-bottom: 1px solid var(--border); text-align: right; }
+  td { white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 0.85rem; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Conflict task</h1>
+  <p class="muted">From <em>Thinking, Fast and Slow</em>, chapter 1 &ndash; when an automatic reaction
+     gets in the way of the task, System 2 has to overrule System 1.</p>
+  <p id="instruction">Two short rounds. In each you answer a simple question about how a word is
+     printed, while ignoring what the word says. Answer as fast as you can.</p>
+
+  <div id="stage" class="stage"></div>
+  <div id="answers" class="buttons" hidden>
+    <button id="answerA"></button>
+    <button id="answerB"></button>
+  </div>
+  <button id="start" class="primary">Start</button>
+
+  <div id="results" hidden>
+    <table>
+      <thead>
+        <tr><th>Round</th><th>Word agrees</th><th>Word conflicts</th><th>Slower by</th><th>Errors</th></tr>
+      </thead>
+      <tbody id="resultRows"></tbody>
+    </table>
+    <p class="muted">Times are averages over correct answers. You read the word automatically even
+       though you were told to ignore it; when its meaning disagrees with the right answer,
+       System 2 must suppress that reading, which costs time and causes mistakes.</p>
+  </div>
+</main>
+
+<script>
+const REPEATS_PER_COMBINATION = 5;
+const GAP_MS = 400;
+
+// Each round asks about one attribute of the stimulus; the words name that attribute's values.
+const ROUNDS = [
+  {
+    name: 'Position',
+    attribute: 'position',
+    instruction: 'Round 1: is the word on the LEFT or on the RIGHT of the centre? Ignore what the word says. Use the arrow keys ← → or the buttons.',
+    answers: [
+      { value: 'left', label: '← Left', key: 'ArrowLeft' },
+      { value: 'right', label: 'Right →', key: 'ArrowRight' },
+    ],
+  },
+  {
+    name: 'Letter case',
+    attribute: 'letterCase',
+    instruction: 'Round 2: is the word printed in UPPERCASE or in lowercase? Ignore what the word says. Use the arrow keys ↑ ↓ or the buttons.',
+    answers: [
+      { value: 'upper', label: '↑ UPPERCASE', key: 'ArrowUp' },
+      { value: 'lower', label: '↓ lowercase', key: 'ArrowDown' },
+    ],
+  },
+];
+const POSITIONS = ['left', 'right'];
+const LETTER_CASES = ['upper', 'lower'];
+
+const el = Object.fromEntries(
+  ['instruction', 'stage', 'answers', 'answerA', 'answerB', 'start', 'results', 'resultRows']
+    .map(id => [id, document.getElementById(id)])
+);
+const answerButtons = [el.answerA, el.answerB];
+
+let roundIndex = -1;
+let trials = [];
+let trialIndex = 0;
+// Set while a word is on screen and an answer is awaited.
+let shownAt;
+let outcomes = [];
+
+const randomOf = values => values[Math.floor(Math.random() * values.length)];
+
+function shuffled(values) {
+  const result = [...values];
+  for (let last = result.length - 1; last > 0; last -= 1) {
+    const other = Math.floor(Math.random() * (last + 1));
+    [result[last], result[other]] = [result[other], result[last]];
+  }
+  return result;
+}
+
+// Every answer appears equally often with an agreeing and with a conflicting word.
+function trialsFor({ attribute, answers }) {
+  const values = answers.map(answer => answer.value);
+  return shuffled(values.flatMap(correct =>
+    values.flatMap(word =>
+      Array.from({ length: REPEATS_PER_COMBINATION }, () => ({
+        position: randomOf(POSITIONS),
+        letterCase: randomOf(LETTER_CASES),
+        [attribute]: correct,
+        word,
+        correct,
+      })))));
+}
+
+function showTrial() {
+  const { word, position, letterCase } = trials[trialIndex];
+  el.stage.className = `stage ${position}`;
+  el.stage.textContent = letterCase === 'upper' ? word.toUpperCase() : word;
+  shownAt = performance.now();
+}
+
+function startRound() {
+  roundIndex = (roundIndex + 1) % ROUNDS.length;
+  if (roundIndex === 0) outcomes = [];
+  const round = ROUNDS[roundIndex];
+  trials = trialsFor(round);
+  trialIndex = 0;
+  el.instruction.textContent = round.instruction;
+  round.answers.forEach(({ label, value }, index) => {
+    answerButtons[index].textContent = label;
+    answerButtons[index].dataset.value = value;
+  });
+  el.answers.hidden = false;
+  el.start.hidden = true;
+  el.results.hidden = true;
+  showTrial();
+}
+
+function answer(value) {
+  if (shownAt === undefined) return;
+  const { word, correct } = trials[trialIndex];
+  const wasCorrect = value === correct;
+  outcomes.push({ roundIndex, conflicting: word !== correct, wasCorrect, ms: performance.now() - shownAt });
+  shownAt = undefined;
+  el.stage.textContent = '';
+  el.stage.classList.toggle('wrong', !wasCorrect);
+  trialIndex += 1;
+  setTimeout(trialIndex < trials.length ? showTrial : finishRound, GAP_MS);
+}
+
+function finishRound() {
+  const isLastRound = roundIndex === ROUNDS.length - 1;
+  el.stage.className = 'stage';
+  el.answers.hidden = true;
+  el.start.hidden = false;
+  el.start.textContent = isLastRound ? 'Try again' : 'Start round 2';
+  el.instruction.textContent = isLastRound
+    ? 'Done. Compare how fast you were when the word agreed with the answer and when it conflicted.'
+    : 'Round 1 done. The next round asks a different question.';
+  if (isLastRound) showResults();
+}
+
+function averageMs(roundOutcomes, conflicting) {
+  const times = roundOutcomes
+    .filter(outcome => outcome.wasCorrect && outcome.conflicting === conflicting)
+    .map(outcome => outcome.ms);
+  return times.length ? times.reduce((sum, ms) => sum + ms, 0) / times.length : undefined;
+}
+
+const formatMs = ms => (ms === undefined ? '–' : `${Math.round(ms)} ms`);
+
+function showResults() {
+  el.resultRows.replaceChildren(...ROUNDS.map((round, index) => {
+    const roundOutcomes = outcomes.filter(outcome => outcome.roundIndex === index);
+    const agreeing = averageMs(roundOutcomes, false);
+    const conflicting = averageMs(roundOutcomes, true);
+    const slowerBy = agreeing === undefined || conflicting === undefined ? undefined : conflicting - agreeing;
+    const errors = roundOutcomes.filter(outcome => !outcome.wasCorrect).length;
+    const row = document.createElement('tr');
+    row.append(...[round.name, formatMs(agreeing), formatMs(conflicting), formatMs(slowerBy), errors].map(text => {
+      const cell = document.createElement('td');
+      cell.textContent = text;
+      return cell;
+    }));
+    return row;
+  }));
+  el.results.hidden = false;
+}
+
+el.start.addEventListener('click', startRound);
+answerButtons.forEach(button => button.addEventListener('pointerdown', () => answer(button.dataset.value)));
+document.addEventListener('keydown', event => {
+  const matching = ROUNDS[roundIndex]?.answers.find(({ key }) => key === event.key);
+  if (!matching || shownAt === undefined) return;
+  event.preventDefault();
+  answer(matching.value);
+});
+</script>
+</body>
+</html>
