@@ -37,6 +37,8 @@
     font: 16px/1.5 system-ui, sans-serif;
   }
   main { max-width: 560px; margin: 0 auto; }
+  .back { display: inline-block; margin-bottom: 12px; color: var(--accent); text-decoration: none; }
+  .back:hover, .back:focus-visible { text-decoration: underline; }
   h1 { margin: 0 0 4px; font-size: 1.6rem; }
   p { margin: 0 0 12px; }
   .muted { color: var(--muted); }
@@ -110,6 +112,7 @@
 </head>
 <body>
 <main>
+  <a class="back" href="index.html">&larr; All exercises</a>
   <h1>Add-1 task</h1>
   <p class="muted">From <em>Thinking, Fast and Slow</em>, chapter 2 &ndash; a feel for System 2 working at full effort.</p>
   <ol>
