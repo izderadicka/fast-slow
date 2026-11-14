@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add-1 task</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f4ef;
+    --text: #22201c;
+    --muted: #6f6a60;
+    --card: #ffffff;
+    --border: #d9d4c8;
+    --accent: #b4521e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1a18;
+      --text: #ece8df;
+      --muted: #a09a8d;
+      --card: #262421;
+      --border: #3d3a34;
+      --accent: #f0935c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 48px;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, sans-serif;
+  }
+  main { max-width: 560px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  ol { margin: 0 0 20px; padding-left: 20px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  select, input, button {
+    font: inherit;
+    color: inherit;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+  }
+  input[type=number] { width: 4.5em; }
+  button { cursor: pointer; padding: 8px 18px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 12px 28px;
+    text-align: center;
+  }
+  .phase {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    min-height: 1.5em;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.85rem;
+  }
+  .beat {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--border);
+  }
+  .beat.on { background: var(--accent); }
+  .digits {
+    display: flex;
+    justify-content: center;
+    gap: 0.25em;
+    min-height: 1.3em;
+    margin-top: 12px;
+    font: 600 clamp(2.5rem, 14vw, 4.5rem)/1.3 ui-monospace, monospace;
+  }
+  .digits span { width: 1ch; color: var(--muted); }
+  .digits span.current { color: var(--accent); }
+  .digits.plain span { color: var(--text); }
+  .result { margin-top: 20px; text-align: center; }
+  .result .answer { font: 600 1.4rem ui-monospace, monospace; margin-bottom: 12px; }
+  .result button { margin: 0 4px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Add-1 task</h1>
+  <p class="muted">From <em>Thinking, Fast and Slow</em>, chapter 2 &ndash; a feel for System 2 working at full effort.</p>
+  <ol>
+    <li>A metronome beats once per second. Read the digits aloud, one per beat.</li>
+    <li>The card disappears. Wait for two beats.</li>
+    <li>Say the new string, one digit per beat, each digit increased by the increment
+        (9 wraps to 0, so with Add-1 <strong>5294</strong> becomes <strong>6305</strong>).</li>
+  </ol>
+
+  <div class="controls">
+    <label>Task
+      <select id="increment">
+        <option value="1">Add-1</option>
+        <option value="3">Add-3</option>
+      </select>
+    </label>
+    <label>Digits <input id="length" type="number" min="2" max="8" value="4"></label>
+    <button id="start" class="primary">Start</button>
+    <span id="score" class="muted"></span>
+  </div>
+
+  <div class="card">
+    <div class="phase"><span id="beat" class="beat"></span><span id="phase">Press Start</span></div>
+    <div id="digits" class="digits"></div>
+  </div>
+
+  <div id="result" class="result" hidden>
+    <div id="answer" class="answer"></div>
+    <button id="right">I got it right</button>
+    <button id="wrong">I missed</button>
+  </div>
+</main>
+
+<script>
+const BEAT_MS = 1000;
+const LEAD_IN_BEATS = 2;
+const WAIT_BEATS = 2;
+const PHASE_LABELS = { ready: 'Get ready', read: 'Read aloud', wait: 'Wait', report: 'Report' };
+
+const el = Object.fromEntries(
+  ['increment', 'length', 'start', 'score', 'beat', 'phase', 'digits', 'result', 'answer', 'right', 'wrong']
+    .map(id => [id, document.getElementById(id)])
+);
+
+let audio;
+let timer;
+let trial;
+const score = { right: 0, total: 0 };
+
+function click() {
+  const oscillator = audio.createOscillator();
+  const gain = audio.createGain();
+  oscillator.frequency.value = 880;
+  gain.gain.setValueAtTime(0.3, audio.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.05);
+  oscillator.connect(gain).connect(audio.destination);
+  oscillator.start();
+  oscillator.stop(audio.currentTime + 0.05);
+}
+
+function flashBeat() {
+  el.beat.classList.add('on');
+  setTimeout(() => el.beat.classList.remove('on'), 150);
+}
+
+// Renders one character per slot, highlighting the slot at `current` (if any).
+function showDigits(characters, current) {
+  el.digits.classList.toggle('plain', current === undefined);
+  el.digits.replaceChildren(...characters.map((character, index) => {
+    const span = document.createElement('span');
+    span.textContent = character;
+    span.classList.toggle('current', index === current);
+    return span;
+  }));
+}
+
+function renderStep({ phase, index }) {
+  el.phase.textContent = PHASE_LABELS[phase];
+  if (phase === 'read') showDigits(trial.digits, index);
+  else if (phase === 'report') showDigits(trial.digits.map(() => '_'), index);
+  else showDigits([]);
+}
+
+function onBeat() {
+  const step = trial.steps[trial.beat];
+  if (!step) return finishTrial();
+  click();
+  flashBeat();
+  renderStep(step);
+  trial.beat += 1;
+  // Schedule against the trial's start time so the rhythm does not drift.
+  timer = setTimeout(onBeat, trial.startedAt + trial.beat * BEAT_MS - performance.now());
+}
+
+function startTrial() {
+  audio ??= new AudioContext();
+  const increment = Number(el.increment.value);
+  const length = Math.min(Math.max(Math.round(Number(el.length.value)) || 4, 2), 8);
+  const digits = Array.from({ length }, () => Math.floor(Math.random() * 10));
+  const stepsOf = (phase, count) => Array.from({ length: count }, (_, index) => ({ phase, index }));
+  trial = {
+    digits,
+    answer: digits.map(digit => (digit + increment) % 10),
+    steps: [
+      ...stepsOf('ready', LEAD_IN_BEATS),
+      ...stepsOf('read', length),
+      ...stepsOf('wait', WAIT_BEATS),
+      ...stepsOf('report', length),
+    ],
+    beat: 0,
+    startedAt: performance.now(),
+  };
+  el.result.hidden = true;
+  el.start.textContent = 'Stop';
+  onBeat();
+}
+
+function finishTrial() {
+  el.phase.textContent = 'Check your answer';
+  showDigits(trial.answer);
+  el.answer.textContent = `${trial.digits.join('')} → ${trial.answer.join('')}`;
+  el.result.hidden = false;
+  el.start.hidden = true;
+}
+
+function stopTrial() {
+  clearTimeout(timer);
+  trial = undefined;
+  el.phase.textContent = 'Press Start';
+  el.start.textContent = 'Start';
+  showDigits([]);
+}
+
+function recordResult(wasRight) {
+  score.total += 1;
+  score.right += wasRight ? 1 : 0;
+  el.score.textContent = `${score.right} of ${score.total} correct`;
+  el.start.hidden = false;
+  startTrial();
+}
+
+el.start.addEventListener('click', () => (trial ? stopTrial() : startTrial()));
+el.right.addEventListener('click', () => recordResult(true));
+el.wrong.addEventListener('click', () => recordResult(false));
+</script>
+</body>
+</html>
