@@ -13,6 +13,8 @@
     --card: #ffffff;
     --border: #d9d4c8;
     --accent: #b4521e;
+    --good: #2e7d32;
+    --bad: #c62828;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -22,6 +24,8 @@
       --card: #262421;
       --border: #3d3a34;
       --accent: #f0935c;
+      --good: #7cc47f;
+      --bad: #ef7f7f;
     }
   }
   * { box-sizing: border-box; }
@@ -56,6 +60,7 @@
   button { cursor: pointer; padding: 8px 18px; }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
   .card {
+    position: relative;
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -90,7 +95,14 @@
   }
   .digits span { width: 1ch; color: var(--muted); }
   .digits span.current { color: var(--accent); }
-  .digits.plain span { color: var(--text); }
+  .digits span.plain { color: var(--text); }
+  .digits span.good { color: var(--good); }
+  .digits span.bad { color: var(--bad); }
+  /* Invisible but focusable, so phones show their numeric keyboard. */
+  .entry { position: absolute; inset: 0; width: 100%; opacity: 0; border: 0; cursor: default; }
+  .verdict { font-weight: 600; margin-bottom: 12px; }
+  .verdict.good { color: var(--good); }
+  .verdict.bad { color: var(--bad); }
   .result { margin-top: 20px; text-align: center; }
   .result .answer { font: 600 1.4rem ui-monospace, monospace; margin-bottom: 12px; }
   .result button { margin: 0 4px; }
@@ -106,6 +118,8 @@
     <li>The card disappears. Wait for two beats.</li>
     <li>Say the new string, one digit per beat, each digit increased by the increment
         (9 wraps to 0, so with Add-1 <strong>5294</strong> becomes <strong>6305</strong>).</li>
+    <li>Type the digits as you say them and the page checks the answer for you;
+        if you only speak, you score yourself.</li>
   </ol>
 
   <div class="controls">
@@ -123,12 +137,17 @@
   <div class="card">
     <div class="phase"><span id="beat" class="beat"></span><span id="phase">Press Start</span></div>
     <div id="digits" class="digits"></div>
+    <input id="entry" class="entry" inputmode="numeric" autocomplete="off" aria-label="Type your answer">
   </div>
 
   <div id="result" class="result" hidden>
     <div id="answer" class="answer"></div>
-    <button id="right">I got it right</button>
-    <button id="wrong">I missed</button>
+    <div id="verdict" class="verdict"></div>
+    <div id="selfScore">
+      <button id="right">I got it right</button>
+      <button id="wrong">I missed</button>
+    </div>
+    <button id="next" class="primary">Next card</button>
   </div>
 </main>
 
@@ -139,7 +158,8 @@ const WAIT_BEATS = 2;
 const PHASE_LABELS = { ready: 'Get ready', read: 'Read aloud', wait: 'Wait', report: 'Report' };
 
 const el = Object.fromEntries(
-  ['increment', 'length', 'start', 'score', 'beat', 'phase', 'digits', 'result', 'answer', 'right', 'wrong']
+  ['increment', 'length', 'start', 'score', 'beat', 'phase', 'digits', 'entry', 'result', 'answer',
+   'verdict', 'selfScore', 'right', 'wrong', 'next']
     .map(id => [id, document.getElementById(id)])
 );
 
@@ -164,30 +184,33 @@ function flashBeat() {
   setTimeout(() => el.beat.classList.remove('on'), 150);
 }
 
-// Renders one character per slot, highlighting the slot at `current` (if any).
-function showDigits(characters, current) {
-  el.digits.classList.toggle('plain', current === undefined);
+// Renders one character per slot; `classFor(index)` names the slot's style.
+function showDigits(characters, classFor = () => 'plain') {
   el.digits.replaceChildren(...characters.map((character, index) => {
     const span = document.createElement('span');
     span.textContent = character;
-    span.classList.toggle('current', index === current);
+    span.className = classFor(index);
     return span;
   }));
 }
 
-function renderStep({ phase, index }) {
+// The typed answer so far, padded with blanks to the full length.
+const typedSlots = () => trial.digits.map((_, index) => trial.typed[index] ?? '_');
+
+function renderStep({ phase, index } = trial.step) {
+  const highlightCurrent = slot => (slot === index ? 'current' : '');
   el.phase.textContent = PHASE_LABELS[phase];
-  if (phase === 'read') showDigits(trial.digits, index);
-  else if (phase === 'report') showDigits(trial.digits.map(() => '_'), index);
+  if (phase === 'read') showDigits(trial.digits, highlightCurrent);
+  else if (phase === 'report') showDigits(typedSlots(), highlightCurrent);
   else showDigits([]);
 }
 
 function onBeat() {
-  const step = trial.steps[trial.beat];
-  if (!step) return finishTrial();
+  trial.step = trial.steps[trial.beat];
+  if (!trial.step) return finishTrial();
   click();
   flashBeat();
-  renderStep(step);
+  renderStep();
   trial.beat += 1;
   // Schedule against the trial's start time so the rhythm does not drift.
   timer = setTimeout(onBeat, trial.startedAt + trial.beat * BEAT_MS - performance.now());
@@ -208,20 +231,47 @@ function startTrial() {
       ...stepsOf('wait', WAIT_BEATS),
       ...stepsOf('report', length),
     ],
+    typed: [],
     beat: 0,
     startedAt: performance.now(),
   };
   el.result.hidden = true;
+  el.start.hidden = false;
   el.start.textContent = 'Stop';
+  el.entry.focus();
   onBeat();
 }
 
+// Digits typed during the report phase fill the answer slots in order.
+function onEntry() {
+  const typedDigits = el.entry.value.match(/\d/g) ?? [];
+  el.entry.value = '';
+  if (trial?.step?.phase !== 'report') return;
+  trial.typed = [...trial.typed, ...typedDigits.map(Number)].slice(0, trial.digits.length);
+  renderStep();
+}
+
 function finishTrial() {
-  el.phase.textContent = 'Check your answer';
-  showDigits(trial.answer);
+  const wasTyped = trial.typed.length > 0;
   el.answer.textContent = `${trial.digits.join('')} → ${trial.answer.join('')}`;
+  el.selfScore.hidden = wasTyped;
+  el.next.hidden = !wasTyped;
+  el.verdict.hidden = !wasTyped;
+  if (wasTyped) {
+    const isRight = index => trial.typed[index] === trial.answer[index];
+    const wasRight = trial.answer.every((_, index) => isRight(index));
+    el.phase.textContent = 'Your answer';
+    showDigits(typedSlots(), index => (isRight(index) ? 'good' : 'bad'));
+    el.verdict.textContent = wasRight ? 'Correct' : 'Wrong';
+    el.verdict.className = `verdict ${wasRight ? 'good' : 'bad'}`;
+    recordResult(wasRight);
+  } else {
+    el.phase.textContent = 'Check your answer';
+    showDigits(trial.answer);
+  }
   el.result.hidden = false;
   el.start.hidden = true;
+  if (wasTyped) el.next.focus();
 }
 
 function stopTrial() {
@@ -236,13 +286,18 @@ function recordResult(wasRight) {
   score.total += 1;
   score.right += wasRight ? 1 : 0;
   el.score.textContent = `${score.right} of ${score.total} correct`;
-  el.start.hidden = false;
+}
+
+function recordSelfScore(wasRight) {
+  recordResult(wasRight);
   startTrial();
 }
 
 el.start.addEventListener('click', () => (trial ? stopTrial() : startTrial()));
-el.right.addEventListener('click', () => recordResult(true));
-el.wrong.addEventListener('click', () => recordResult(false));
+el.entry.addEventListener('input', onEntry);
+el.right.addEventListener('click', () => recordSelfScore(true));
+el.wrong.addEventListener('click', () => recordSelfScore(false));
+el.next.addEventListener('click', startTrial);
 </script>
 </body>
 </html>
