@@ -64,8 +64,9 @@
   .stage.left { justify-content: flex-start; }
   .stage.right { justify-content: flex-end; }
   .stage.wrong { border-color: var(--bad); }
-  .buttons { display: flex; gap: 10px; margin-bottom: 16px; }
-  .buttons button { flex: 1; padding: 14px 8px; }
+  /* Stacked in the middle so the buttons' own placement gives no left/right hint. */
+  .buttons { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .buttons button { width: 12em; padding: 14px 8px; }
   button {
     font: inherit;
     color: inherit;
