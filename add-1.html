@@ -100,12 +100,11 @@
   .digits span.bad { color: var(--bad); }
   /* Invisible but focusable, so phones show their numeric keyboard. */
   .entry { position: absolute; inset: 0; width: 100%; opacity: 0; border: 0; cursor: default; }
-  .verdict { font-weight: 600; margin-bottom: 12px; }
+  .verdict { font-weight: 600; }
   .verdict.good { color: var(--good); }
   .verdict.bad { color: var(--bad); }
   .result { margin-top: 20px; text-align: center; }
-  .result .answer { font: 600 1.4rem ui-monospace, monospace; margin-bottom: 12px; }
-  .result button { margin: 0 4px; }
+  .result .answer { font: 600 1.4rem ui-monospace, monospace; margin-bottom: 4px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -118,8 +117,9 @@
     <li>The card disappears. Wait for two beats.</li>
     <li>Say the new string, one digit per beat, each digit increased by the increment
         (9 wraps to 0, so with Add-1 <strong>5294</strong> becomes <strong>6305</strong>).</li>
-    <li>Type the digits as you say them and the page checks the answer for you;
-        if you only speak, you score yourself.</li>
+    <li>Type the digits as you say them and the page checks the answer for you.
+        You get two extra beats to finish typing.</li>
+    <li>The next card follows right away, until you press Stop.</li>
   </ol>
 
   <div class="controls">
@@ -143,11 +143,6 @@
   <div id="result" class="result" hidden>
     <div id="answer" class="answer"></div>
     <div id="verdict" class="verdict"></div>
-    <div id="selfScore">
-      <button id="right">I got it right</button>
-      <button id="wrong">I missed</button>
-    </div>
-    <button id="next" class="primary">Next card</button>
   </div>
 </main>
 
@@ -155,11 +150,13 @@
 const BEAT_MS = 1000;
 const LEAD_IN_BEATS = 2;
 const WAIT_BEATS = 2;
-const PHASE_LABELS = { ready: 'Get ready', read: 'Read aloud', wait: 'Wait', report: 'Report' };
+// Extra beats to finish typing an answer that was started but is not complete.
+const GRACE_BEATS = 2;
+const PHASE_LABELS = { ready: 'Get ready', read: 'Read aloud', wait: 'Wait', report: 'Report', grace: 'Report' };
+const ANSWER_PHASES = ['report', 'grace'];
 
 const el = Object.fromEntries(
-  ['increment', 'length', 'start', 'score', 'beat', 'phase', 'digits', 'entry', 'result', 'answer',
-   'verdict', 'selfScore', 'right', 'wrong', 'next']
+  ['increment', 'length', 'start', 'score', 'beat', 'phase', 'digits', 'entry', 'result', 'answer', 'verdict']
     .map(id => [id, document.getElementById(id)])
 );
 
@@ -197,27 +194,19 @@ function showDigits(characters, classFor = () => 'plain') {
 // The typed answer so far, padded with blanks to the full length.
 const typedSlots = () => trial.digits.map((_, index) => trial.typed[index] ?? '_');
 
-function renderStep({ phase, index } = trial.step) {
+function renderStep() {
+  const { phase, index } = trial.step;
   const highlightCurrent = slot => (slot === index ? 'current' : '');
   el.phase.textContent = PHASE_LABELS[phase];
+  // The lead-in leaves the previous card's result on screen.
+  if (phase === 'ready') return;
+  el.result.hidden = true;
   if (phase === 'read') showDigits(trial.digits, highlightCurrent);
-  else if (phase === 'report') showDigits(typedSlots(), highlightCurrent);
-  else showDigits([]);
+  else if (phase === 'wait') showDigits([]);
+  else showDigits(typedSlots(), phase === 'report' ? highlightCurrent : () => '');
 }
 
-function onBeat() {
-  trial.step = trial.steps[trial.beat];
-  if (!trial.step) return finishTrial();
-  click();
-  flashBeat();
-  renderStep();
-  trial.beat += 1;
-  // Schedule against the trial's start time so the rhythm does not drift.
-  timer = setTimeout(onBeat, trial.startedAt + trial.beat * BEAT_MS - performance.now());
-}
-
-function startTrial() {
-  audio ??= new AudioContext();
+function dealCard(startedAt) {
   const increment = Number(el.increment.value);
   const length = Math.min(Math.max(Math.round(Number(el.length.value)) || 4, 2), 8);
   const digits = Array.from({ length }, () => Math.floor(Math.random() * 10));
@@ -230,74 +219,82 @@ function startTrial() {
       ...stepsOf('read', length),
       ...stepsOf('wait', WAIT_BEATS),
       ...stepsOf('report', length),
+      ...stepsOf('grace', GRACE_BEATS),
     ],
     typed: [],
     beat: 0,
-    startedAt: performance.now(),
+    startedAt,
   };
-  el.result.hidden = true;
-  el.start.hidden = false;
-  el.start.textContent = 'Stop';
-  el.entry.focus();
-  onBeat();
 }
 
-// Digits typed during the report phase fill the answer slots in order.
+// The grace beats are only used while a typed answer is still incomplete.
+function isAnswerTimeOver() {
+  const step = trial.steps[trial.beat];
+  const typedCount = trial.typed.length;
+  return !step || (step.phase === 'grace' && (typedCount === 0 || typedCount === trial.digits.length));
+}
+
+function onBeat() {
+  if (isAnswerTimeOver()) {
+    showResult();
+    // The next card starts on this very beat, so the rhythm never breaks.
+    dealCard(trial.startedAt + trial.beat * BEAT_MS);
+  }
+  trial.step = trial.steps[trial.beat];
+  click();
+  flashBeat();
+  renderStep();
+  trial.beat += 1;
+  // Schedule against the card's start time so the rhythm does not drift.
+  timer = setTimeout(onBeat, trial.startedAt + trial.beat * BEAT_MS - performance.now());
+}
+
+// Digits typed while answering fill the answer slots in order.
 function onEntry() {
   const typedDigits = el.entry.value.match(/\d/g) ?? [];
   el.entry.value = '';
-  if (trial?.step?.phase !== 'report') return;
+  if (!ANSWER_PHASES.includes(trial?.step?.phase)) return;
   trial.typed = [...trial.typed, ...typedDigits.map(Number)].slice(0, trial.digits.length);
   renderStep();
 }
 
-function finishTrial() {
+// Shows the finished card's answer; a typed answer is also checked and scored.
+function showResult() {
   const wasTyped = trial.typed.length > 0;
   el.answer.textContent = `${trial.digits.join('')} → ${trial.answer.join('')}`;
-  el.selfScore.hidden = wasTyped;
-  el.next.hidden = !wasTyped;
   el.verdict.hidden = !wasTyped;
-  if (wasTyped) {
-    const isRight = index => trial.typed[index] === trial.answer[index];
-    const wasRight = trial.answer.every((_, index) => isRight(index));
-    el.phase.textContent = 'Your answer';
-    showDigits(typedSlots(), index => (isRight(index) ? 'good' : 'bad'));
-    el.verdict.textContent = wasRight ? 'Correct' : 'Wrong';
-    el.verdict.className = `verdict ${wasRight ? 'good' : 'bad'}`;
-    recordResult(wasRight);
-  } else {
-    el.phase.textContent = 'Check your answer';
-    showDigits(trial.answer);
-  }
   el.result.hidden = false;
-  el.start.hidden = true;
-  if (wasTyped) el.next.focus();
-}
+  if (!wasTyped) return showDigits(trial.answer);
 
-function stopTrial() {
-  clearTimeout(timer);
-  trial = undefined;
-  el.phase.textContent = 'Press Start';
-  el.start.textContent = 'Start';
-  showDigits([]);
-}
-
-function recordResult(wasRight) {
+  const isRight = index => trial.typed[index] === trial.answer[index];
+  const wasRight = trial.answer.every((_, index) => isRight(index));
+  showDigits(typedSlots(), index => (isRight(index) ? 'good' : 'bad'));
+  el.verdict.textContent = wasRight ? 'Correct' : 'Wrong';
+  el.verdict.className = `verdict ${wasRight ? 'good' : 'bad'}`;
   score.total += 1;
   score.right += wasRight ? 1 : 0;
   el.score.textContent = `${score.right} of ${score.total} correct`;
 }
 
-function recordSelfScore(wasRight) {
-  recordResult(wasRight);
-  startTrial();
+function start() {
+  audio ??= new AudioContext();
+  el.start.textContent = 'Stop';
+  el.entry.focus();
+  dealCard(performance.now());
+  onBeat();
 }
 
-el.start.addEventListener('click', () => (trial ? stopTrial() : startTrial()));
+function stop() {
+  clearTimeout(timer);
+  trial = undefined;
+  el.phase.textContent = 'Press Start';
+  el.start.textContent = 'Start';
+  el.result.hidden = true;
+  showDigits([]);
+}
+
+el.start.addEventListener('click', () => (trial ? stop() : start()));
 el.entry.addEventListener('input', onEntry);
-el.right.addEventListener('click', () => recordSelfScore(true));
-el.wrong.addEventListener('click', () => recordSelfScore(false));
-el.next.addEventListener('click', startTrial);
 </script>
 </body>
 </html>
