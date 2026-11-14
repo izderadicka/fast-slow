@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thinking, Fast and Slow – exercises</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f4ef;
+    --text: #22201c;
+    --muted: #6f6a60;
+    --card: #ffffff;
+    --border: #d9d4c8;
+    --accent: #b4521e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1a18;
+      --text: #ece8df;
+      --muted: #a09a8d;
+      --card: #262421;
+      --border: #3d3a34;
+      --accent: #f0935c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 48px;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, sans-serif;
+  }
+  main { max-width: 560px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  p { margin: 0 0 20px; }
+  .muted { color: var(--muted); }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  a.page {
+    display: block;
+    padding: 14px 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: inherit;
+    text-decoration: none;
+  }
+  a.page:hover, a.page:focus-visible { border-color: var(--accent); }
+  a.page strong { display: block; color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Thinking, Fast and Slow</h1>
+  <p class="muted">Small exercises to try out ideas from Daniel Kahneman's book.</p>
+  <ul>
+    <li><a class="page" href="muller-lyer.html">
+      <strong>Müller-Lyer illusion</strong>
+      <span class="muted">Chapter 1 &ndash; which line is longer? An impression System 1 will not give up.</span>
+    </a></li>
+    <li><a class="page" href="add-1.html">
+      <strong>Add-1 task</strong>
+      <span class="muted">Chapter 2 &ndash; increment digits to a metronome and feel System 2 at full effort.</span>
+    </a></li>
+  </ul>
+</main>
+</body>
+</html>
