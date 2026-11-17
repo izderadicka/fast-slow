@@ -131,7 +131,8 @@
     <li>Say the new string, one digit per beat, each digit increased by the increment
         (9 wraps to 0, so with Add-1 <strong>5294</strong> becomes <strong>6305</strong>).</li>
     <li>Type the digits as you say them and the page checks the answer for you.
-        You get two extra beats to finish typing.</li>
+        Typing is accepted as soon as the card disappears, and you get two extra beats
+        to finish.</li>
     <li>The next card follows right away, until you press Stop.</li>
   </ol>
   <p class="muted"><strong>Tip:</strong> if holding the original digits is too much, read the card
@@ -189,11 +190,12 @@ const WAIT_BEATS = 2;
 // Extra beats to finish typing an answer that was started but is not complete.
 const GRACE_BEATS = 2;
 const PHASE_LABELS = { ready: 'Get ready', read: 'Read aloud', wait: 'Wait', report: 'Report', grace: 'Report' };
-const ANSWER_PHASES = ['report', 'grace'];
+// Typing is accepted from the moment the card disappears, so an early first digit is not lost.
+const ANSWER_PHASES = ['wait', 'report', 'grace'];
 // Letters flash from the first read beat to the last report beat.
 const LETTER_PHASES = ['read', 'wait', 'report'];
-const LETTER_MS = 200;
-const LETTER_ON_MS = 150;
+const LETTER_MS = 500;
+const LETTER_ON_MS = 400;
 // K is the target; I and O are left out because they look like digits.
 const DISTRACTOR_LETTERS = 'ABCDEFGHJLMNPQRSTUVWXYZ';
 const K_PROBABILITY = 0.5;
@@ -249,7 +251,7 @@ function renderStep() {
   if (phase === 'ready') return;
   el.result.hidden = true;
   if (phase === 'read') showDigits(trial.digits, highlightCurrent);
-  else if (phase === 'wait') showDigits([]);
+  else if (phase === 'wait' && trial.typed.length === 0) showDigits([]);
   else showDigits(typedSlots(), phase === 'report' ? highlightCurrent : () => '');
 }
 
