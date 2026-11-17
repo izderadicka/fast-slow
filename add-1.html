@@ -161,7 +161,7 @@
      aloud already incremented (see 5294, say &ldquo;6305&rdquo;) and just repeat that string when
      reporting. It is easier, because the adding is done while the card is still visible.</p>
   <p class="muted"><strong>Letter K test</strong> (optional): letters flash on the card while you work.
-     Give the digits full priority, and after each card answer whether a K appeared. In Kahneman's
+     Give the digits full priority, and after each card say whether you noticed a K &ndash; yes only if you really saw it, no guessing. In Kahneman's
      experiment people almost never missed a K near the start or the end of the task, but missed it
      almost half the time when mental effort was at its peak.</p>
 
@@ -188,7 +188,7 @@
     <div id="answer" class="answer"></div>
     <div id="verdict" class="verdict"></div>
     <div id="question" class="question" hidden>
-      <p>Did a <strong>K</strong> appear among the flashing letters?</p>
+      <p>Did you notice a <strong>K</strong>? Answer yes only if you really saw it &ndash; don't guess.</p>
       <button id="sawK">Yes (Y)</button>
       <button id="noK">No (N)</button>
     </div>
@@ -426,7 +426,7 @@ function showResult() {
 
 function askAboutK() {
   trial.isAwaitingK = true;
-  el.phase.textContent = 'Did you see a K?';
+  el.phase.textContent = 'Did you notice a K?';
   el.question.hidden = false;
 }
 
