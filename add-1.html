@@ -108,7 +108,29 @@
   .question p { margin-bottom: 8px; }
   .question button { margin: 0 4px; }
   #kFeedback { margin: 8px 0 0; }
-  .k-stats { margin-top: 24px; }
+  .report { margin-top: 28px; }
+  .report h2 { margin: 24px 0 8px; font-size: 1.1rem; }
+  .report h2:first-child { margin-top: 0; }
+  .legend { display: flex; gap: 16px; margin-bottom: 8px; font-size: 0.85rem; color: var(--muted); }
+  .legend span::before {
+    content: '';
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 6px;
+    border-radius: 2px;
+    background: var(--swatch);
+  }
+  .histogram { display: flex; gap: 8px; height: 180px; border-bottom: 1px solid var(--border); }
+  .histogram .column { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+  .histogram .count { font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+  /* Stacked: seen on the baseline, missed above it, a 2px surface gap between. */
+  .histogram .bar { width: 100%; max-width: 56px; display: flex; flex-direction: column; gap: 2px; }
+  .histogram .bar div:first-child { border-radius: 4px 4px 0 0; }
+  .histogram .seen { background: var(--good); }
+  .histogram .missed { background: var(--bad); }
+  .axis { display: flex; gap: 8px; margin-bottom: 8px; }
+  .axis span { flex: 1; text-align: center; font-size: 0.8rem; color: var(--muted); }
   table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
   th, td { padding: 6px 4px; border-bottom: 1px solid var(--border); text-align: right; }
   th:first-child, td:first-child { text-align: left; }
@@ -153,7 +175,6 @@
     <label>Digits <input id="length" type="number" min="2" max="8" value="4"></label>
     <label><input id="kTest" type="checkbox"> Letter K test</label>
     <button id="start" class="primary">Start</button>
-    <span id="score" class="muted"></span>
   </div>
 
   <div class="card">
@@ -174,13 +195,26 @@
     <p id="kFeedback"></p>
   </div>
 
-  <div id="kStats" class="k-stats" hidden>
-    <table>
-      <thead><tr><th>K shown at</th><th>Seen</th></tr></thead>
-      <tbody id="kRows"></tbody>
-    </table>
-    <p id="falseAlarms" class="muted"></p>
-  </div>
+  <section id="report" class="report" hidden>
+    <div id="digitReport">
+      <h2>Digits</h2>
+      <p id="digitSummary"></p>
+      <table id="wrongTable">
+        <thead><tr><th>Missed cards by wrong digits</th><th>Cards</th></tr></thead>
+        <tbody id="wrongRows"></tbody>
+      </table>
+    </div>
+    <div id="kReport">
+      <h2>Letter K by time</h2>
+      <div class="legend">
+        <span style="--swatch: var(--good)">Seen</span>
+        <span style="--swatch: var(--bad)">Missed</span>
+      </div>
+      <div id="kHistogram" class="histogram" role="img"></div>
+      <div id="kAxis" class="axis"></div>
+      <p id="falseAlarms" class="muted"></p>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -204,8 +238,9 @@ const K_PROBABILITY = 2 / 3;
 const K_WINDOWS = 5;
 
 const el = Object.fromEntries(
-  ['increment', 'length', 'kTest', 'start', 'score', 'beat', 'phase', 'letter', 'digits', 'entry', 'result',
-   'answer', 'verdict', 'question', 'sawK', 'noK', 'kFeedback', 'kStats', 'kRows', 'falseAlarms']
+  ['increment', 'length', 'kTest', 'start', 'beat', 'phase', 'letter', 'digits', 'entry', 'result', 'answer',
+   'verdict', 'question', 'sawK', 'noK', 'kFeedback', 'report', 'digitReport', 'digitSummary', 'wrongTable',
+   'wrongRows', 'kReport', 'kHistogram', 'kAxis', 'falseAlarms']
     .map(id => [id, document.getElementById(id)])
 );
 
@@ -213,7 +248,8 @@ let audio;
 let timer;
 let letterFrame;
 let trial;
-const score = { right: 0, total: 0 };
+// For each scored card of the session, how many of its digits were wrong.
+let wrongDigitCounts = [];
 // K statistics are kept for one card length; changing the digit count starts them afresh.
 let kStats;
 // Windows still to be used before every window has had a K, in random order.
@@ -381,13 +417,11 @@ function showResult() {
   if (!wasTyped) return showDigits(trial.answer);
 
   const isRight = index => trial.typed[index] === trial.answer[index];
-  const wasRight = trial.answer.every((_, index) => isRight(index));
+  const wrongCount = trial.answer.filter((_, index) => !isRight(index)).length;
   showDigits(typedSlots(), index => (isRight(index) ? 'good' : 'bad'));
-  el.verdict.textContent = wasRight ? 'Correct' : 'Wrong';
-  el.verdict.className = `verdict ${wasRight ? 'good' : 'bad'}`;
-  score.total += 1;
-  score.right += wasRight ? 1 : 0;
-  el.score.textContent = `${score.right} of ${score.total} correct`;
+  el.verdict.textContent = wrongCount ? 'Wrong' : 'Correct';
+  el.verdict.className = `verdict ${wrongCount ? 'bad' : 'good'}`;
+  wrongDigitCounts.push(wrongCount);
 }
 
 function askAboutK() {
@@ -410,31 +444,85 @@ function answerAboutK(reportedK) {
   }
   el.question.hidden = true;
   el.kFeedback.hidden = false;
-  showKStats();
   el.entry.focus();
   dealCard(performance.now());
   onBeat();
 }
 
-function showKStats() {
-  el.kRows.replaceChildren(...kStats.windows.map(({ label, shown, seen }) => {
-    const seenText = shown ? `${seen} of ${shown} (${Math.round(100 * seen / shown)} %)` : '–';
-    const row = document.createElement('tr');
-    row.append(...[label, seenText].map(text => {
-      const cell = document.createElement('td');
-      cell.textContent = text;
-      return cell;
-    }));
-    return row;
+const cellRow = texts => {
+  const row = document.createElement('tr');
+  row.append(...texts.map(text => {
+    const cell = document.createElement('td');
+    cell.textContent = text;
+    return cell;
+  }));
+  return row;
+};
+
+function showDigitReport() {
+  const missed = wrongDigitCounts.filter(Boolean);
+  el.digitSummary.textContent =
+    `Cards: ${wrongDigitCounts.length} · correct: ${wrongDigitCounts.length - missed.length} · missed: ${missed.length}`;
+  const cardsByWrongCount = missed.reduce((counts, wrong) => counts.set(wrong, (counts.get(wrong) ?? 0) + 1), new Map());
+  el.wrongRows.replaceChildren(...[...cardsByWrongCount]
+    .sort(([fewer], [more]) => fewer - more)
+    .map(([wrong, cards]) => cellRow([`${wrong} wrong digit${wrong > 1 ? 's' : ''}`, cards])));
+  el.wrongTable.hidden = missed.length === 0;
+}
+
+const HISTOGRAM_PX = 150;
+
+function showKReport() {
+  const tallest = Math.max(1, ...kStats.windows.map(({ shown }) => shown));
+  const block = (className, count) => {
+    const div = document.createElement('div');
+    div.className = className;
+    div.style.height = `${count * HISTOGRAM_PX / tallest}px`;
+    return div;
+  };
+  el.kHistogram.replaceChildren(...kStats.windows.map(({ label, shown, seen }) => {
+    const missed = shown - seen;
+    const column = document.createElement('div');
+    column.className = 'column';
+    column.title = `${label}: seen ${seen}, missed ${missed}`;
+    const count = document.createElement('div');
+    count.className = 'count';
+    count.textContent = shown ? `${seen}/${shown}` : '–';
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    // Zero-height blocks are left out so the 2px gap only separates real segments.
+    bar.append(...[['missed', missed], ['seen', seen]].filter(([, n]) => n).map(([name, n]) => block(name, n)));
+    column.append(count, bar);
+    return column;
+  }));
+  el.kHistogram.setAttribute('aria-label',
+    kStats.windows.map(({ label, shown, seen }) => `${label}: ${seen} of ${shown} seen`).join('; '));
+  el.kAxis.replaceChildren(...kStats.windows.map(({ label }) => {
+    const span = document.createElement('span');
+    span.textContent = label;
+    return span;
   }));
   const { total, reportedK } = kStats.cardsWithoutK;
   el.falseAlarms.textContent = `Cards without a K: ${total}, of which you reported a K on ${reportedK}.
     Times count from the first letter; the statistics start afresh when you change the digit count.`;
-  el.kStats.hidden = false;
+}
+
+// The session report, shown once the session is stopped.
+function showReport() {
+  const hasDigits = wrongDigitCounts.length > 0;
+  const hasK = kStats !== undefined;
+  el.digitReport.hidden = !hasDigits;
+  el.kReport.hidden = !hasK;
+  if (hasDigits) showDigitReport();
+  if (hasK) showKReport();
+  el.report.hidden = !hasDigits && !hasK;
 }
 
 function start() {
   audio ??= new AudioContext();
+  wrongDigitCounts = [];
+  kStats = undefined;
+  el.report.hidden = true;
   el.start.textContent = 'Stop';
   el.entry.focus();
   dealCard(performance.now());
@@ -452,6 +540,7 @@ function stop() {
   el.start.textContent = 'Start';
   el.result.hidden = true;
   showDigits([]);
+  showReport();
 }
 
 el.start.addEventListener('click', () => (trial ? stop() : start()));
