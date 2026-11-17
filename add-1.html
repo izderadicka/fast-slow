@@ -176,7 +176,7 @@
 
   <div id="kStats" class="k-stats" hidden>
     <table>
-      <thead><tr><th>K shown during</th><th>Seen</th></tr></thead>
+      <thead><tr><th>K shown at</th><th>Seen</th></tr></thead>
       <tbody id="kRows"></tbody>
     </table>
     <p id="falseAlarms" class="muted"></p>
@@ -198,7 +198,10 @@ const LETTER_MS = 500;
 const LETTER_ON_MS = 400;
 // K is the target; I and O are left out because they look like digits.
 const DISTRACTOR_LETTERS = 'ABCDEFGHJLMNPQRSTUVWXYZ';
-const K_PROBABILITY = 0.5;
+// The share of cards with a K; the rest catch false alarms.
+const K_PROBABILITY = 2 / 3;
+// The letter span is split into equal time windows; each window gets a K equally often.
+const K_WINDOWS = 5;
 
 const el = Object.fromEntries(
   ['increment', 'length', 'kTest', 'start', 'score', 'beat', 'phase', 'letter', 'digits', 'entry', 'result',
@@ -211,8 +214,10 @@ let timer;
 let letterFrame;
 let trial;
 const score = { right: 0, total: 0 };
-const kDetections = Object.fromEntries(LETTER_PHASES.map(phase => [phase, { shown: 0, seen: 0 }]));
-const cardsWithoutK = { total: 0, reportedK: 0 };
+// K statistics are kept for one card length; changing the digit count starts them afresh.
+let kStats;
+// Windows still to be used before every window has had a K, in random order.
+let kWindowDeck = [];
 
 function click() {
   const oscillator = audio.createOscillator();
@@ -255,15 +260,48 @@ function renderStep() {
   else showDigits(typedSlots(), phase === 'report' ? highlightCurrent : () => '');
 }
 
-// The flashing letters for one card, with a K in about half of the cards.
+function shuffled(values) {
+  const result = [...values];
+  for (let last = result.length - 1; last > 0; last -= 1) {
+    const other = Math.floor(Math.random() * (last + 1));
+    [result[last], result[other]] = [result[other], result[last]];
+  }
+  return result;
+}
+
+// The first letter slot of each time window, plus the end of the span.
+const windowBounds = letterCount =>
+  Array.from({ length: K_WINDOWS + 1 }, (_, window) => Math.floor(letterCount * window / K_WINDOWS));
+
+const slotSeconds = slot => slot * LETTER_MS / 1000;
+
+function resetKStats(letterCount) {
+  const bounds = windowBounds(letterCount);
+  kStats = {
+    letterCount,
+    windows: Array.from({ length: K_WINDOWS }, (_, window) => ({
+      label: `${slotSeconds(bounds[window])}–${slotSeconds(bounds[window + 1])} s`,
+      shown: 0,
+      seen: 0,
+    })),
+    cardsWithoutK: { total: 0, reportedK: 0 },
+  };
+  kWindowDeck = [];
+}
+
+// The flashing letters for one card; a K goes into the next window from a shuffled deck.
 function dealLetters(beatCount) {
   if (!el.kTest.checked) return { letters: [] };
   const randomLetter = () => DISTRACTOR_LETTERS[Math.floor(Math.random() * DISTRACTOR_LETTERS.length)];
   const letters = Array.from({ length: beatCount * BEAT_MS / LETTER_MS }, randomLetter);
+  if (kStats?.letterCount !== letters.length) resetKStats(letters.length);
   if (Math.random() >= K_PROBABILITY) return { letters };
-  const kSlot = Math.floor(Math.random() * letters.length);
+  if (!kWindowDeck.length) kWindowDeck = shuffled(Array.from({ length: K_WINDOWS }, (_, window) => window));
+  const kWindow = kWindowDeck.pop();
+  const bounds = windowBounds(letters.length);
+  const kSlot = bounds[kWindow] + Math.floor(Math.random() * (bounds[kWindow + 1] - bounds[kWindow]));
   letters[kSlot] = 'K';
-  return { letters, kBeat: LEAD_IN_BEATS + Math.floor(kSlot * LETTER_MS / BEAT_MS) };
+  return { letters, k: { window: kWindow, seconds: slotSeconds(kSlot) } };
 }
 
 function dealCard(startedAt) {
@@ -278,13 +316,13 @@ function dealCard(startedAt) {
     ...stepsOf('report', length),
     ...stepsOf('grace', GRACE_BEATS),
   ];
-  const { letters, kBeat } = dealLetters(steps.filter(step => LETTER_PHASES.includes(step.phase)).length);
+  const { letters, k } = dealLetters(steps.filter(step => LETTER_PHASES.includes(step.phase)).length);
   trial = {
     digits,
     answer: digits.map(digit => (digit + increment) % 10),
     steps,
     letters,
-    kPhase: kBeat === undefined ? undefined : steps[kBeat].phase,
+    k,
     typed: [],
     beat: 0,
     startedAt,
@@ -359,14 +397,14 @@ function askAboutK() {
 
 function answerAboutK(reportedK) {
   if (!trial?.isAwaitingK) return;
-  const { kPhase } = trial;
-  if (kPhase) {
-    kDetections[kPhase].shown += 1;
-    kDetections[kPhase].seen += reportedK ? 1 : 0;
-    el.kFeedback.textContent = `A K was shown during ${PHASE_LABELS[kPhase]} – you ${reportedK ? 'saw' : 'missed'} it.`;
+  const { k } = trial;
+  if (k) {
+    kStats.windows[k.window].shown += 1;
+    kStats.windows[k.window].seen += reportedK ? 1 : 0;
+    el.kFeedback.textContent = `K at ${k.seconds} s – you ${reportedK ? 'saw' : 'missed'} it.`;
   } else {
-    cardsWithoutK.total += 1;
-    cardsWithoutK.reportedK += reportedK ? 1 : 0;
+    kStats.cardsWithoutK.total += 1;
+    kStats.cardsWithoutK.reportedK += reportedK ? 1 : 0;
     el.kFeedback.textContent = reportedK ? 'There was no K – a false alarm.' : 'Right, there was no K.';
   }
   el.question.hidden = true;
@@ -378,18 +416,19 @@ function answerAboutK(reportedK) {
 }
 
 function showKStats() {
-  el.kRows.replaceChildren(...LETTER_PHASES.map(phase => {
-    const { shown, seen } = kDetections[phase];
+  el.kRows.replaceChildren(...kStats.windows.map(({ label, shown, seen }) => {
+    const seenText = shown ? `${seen} of ${shown} (${Math.round(100 * seen / shown)} %)` : '–';
     const row = document.createElement('tr');
-    row.append(...[PHASE_LABELS[phase], shown ? `${seen} of ${shown}` : '–'].map(text => {
+    row.append(...[label, seenText].map(text => {
       const cell = document.createElement('td');
       cell.textContent = text;
       return cell;
     }));
     return row;
   }));
-  el.falseAlarms.textContent =
-    `Cards without a K: ${cardsWithoutK.total}, of which you reported a K on ${cardsWithoutK.reportedK}.`;
+  const { total, reportedK } = kStats.cardsWithoutK;
+  el.falseAlarms.textContent = `Cards without a K: ${total}, of which you reported a K on ${reportedK}.
+    Times count from the first letter; the statistics start afresh when you change the digit count.`;
   el.kStats.hidden = false;
 }
 
