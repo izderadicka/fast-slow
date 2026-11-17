@@ -365,7 +365,8 @@ function onBeat() {
 function onEntry() {
   const typedDigits = el.entry.value.match(/\d/g) ?? [];
   el.entry.value = '';
-  if (!ANSWER_PHASES.includes(trial?.step?.phase)) return;
+  // Once the card has been scored, a late digit must not reopen it.
+  if (trial?.isAwaitingK || !ANSWER_PHASES.includes(trial?.step?.phase)) return;
   trial.typed = [...trial.typed, ...typedDigits.map(Number)].slice(0, trial.digits.length);
   renderStep();
 }
