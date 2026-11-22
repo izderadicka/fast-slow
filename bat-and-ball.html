@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bat and ball</title>
+<title>Intuitive answers</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -62,8 +62,12 @@
   }
   input { width: 8em; }
   button { cursor: pointer; padding: 8px 18px; }
+  button:disabled, input:disabled { opacity: 0.5; cursor: default; }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
   .countdown { font-variant-numeric: tabular-nums; color: var(--muted); }
+  section { margin-top: 32px; }
+  h2 { margin: 0 0 8px; font-size: 1.25rem; }
+  .choices { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }
   .verdict { font-weight: 600; font-size: 1.1rem; }
   .verdict.good { color: var(--good); }
   .verdict.bad { color: var(--bad); }
@@ -73,52 +77,77 @@
 <body>
 <main>
   <a class="back" href="index.html">&larr; All exercises</a>
-  <h1>Bat and ball</h1>
-  <p class="muted">From <em>Thinking, Fast and Slow</em>, chapter 3 &ndash; an answer that is intuitive,
-     appealing, and wrong.</p>
-  <p>Do not try to solve the puzzle &ndash; listen to your intuition. You have
-     <strong id="limit"></strong> seconds to type the first answer that comes to mind.</p>
-  <button id="start" class="primary">Show the puzzle</button>
+  <h1>Intuitive answers</h1>
+  <p class="muted">From <em>Thinking, Fast and Slow</em>, chapter 3 &ndash; two puzzles that evoke an
+     answer that is intuitive, appealing, and wrong.</p>
 
-  <div id="puzzle" hidden>
-    <div class="card">
-      <p>A bat and ball cost $1.10.</p>
-      <p>The bat costs one dollar more than the ball.</p>
-      <p>How much does the ball cost?</p>
+  <section data-puzzle="batAndBall">
+    <h2>1. Bat and ball</h2>
+    <p>Do not try to solve the puzzle &ndash; listen to your intuition. You have
+       <strong class="limit"></strong> seconds to type the first answer that comes to mind.</p>
+    <button class="start primary">Show the puzzle</button>
+
+    <div class="puzzle" hidden>
+      <div class="card">
+        <p>A bat and ball cost $1.10.</p>
+        <p>The bat costs one dollar more than the ball.</p>
+        <p>How much does the ball cost?</p>
+      </div>
+      <form>
+        <label>The ball costs <input autocomplete="off" inputmode="decimal" placeholder="cents"></label>
+        <button class="primary">Answer</button>
+        <span class="countdown"></span>
+      </form>
     </div>
-    <form id="form">
-      <label>The ball costs <input id="answer" autocomplete="off" inputmode="decimal" placeholder="cents"></label>
-      <button class="primary">Answer</button>
-      <span id="countdown" class="countdown"></span>
-    </form>
-  </div>
 
-  <div id="explanation" hidden>
-    <p id="verdict" class="verdict"></p>
-    <p>A number came to your mind. The number, of course, is 10: 10¢. The distinctive mark of this
-       easy puzzle is that it evokes an answer that is intuitive, appealing, and wrong.</p>
-    <p>Do the math: if the ball costs 10¢, the bat costs $1.10 and the total is $1.20, not $1.10.
-       The correct answer is <strong>5¢</strong> &ndash; the bat then costs $1.05, one dollar more,
-       and together they cost $1.10.</p>
-    <p class="muted">The quick answer comes from System 1. Checking it takes only a moment of
-       System 2, yet most people &ndash; including many students at top universities &ndash; do not
-       make that small effort.</p>
-    <button id="again">Try again</button>
-  </div>
+    <div class="explanation" hidden>
+      <p class="verdict"></p>
+      <p>A number came to your mind. The number, of course, is 10: 10¢. The distinctive mark of this
+         easy puzzle is that it evokes an answer that is intuitive, appealing, and wrong.</p>
+      <p>Do the math: if the ball costs 10¢, the bat costs $1.10 and the total is $1.20, not $1.10.
+         The correct answer is <strong>5¢</strong> &ndash; the bat then costs $1.05, one dollar more,
+         and together they cost $1.10.</p>
+      <p class="muted">The quick answer comes from System 1. Checking it takes only a moment of
+         System 2, yet most people &ndash; including many students at top universities &ndash; do not
+         make that small effort.</p>
+      <button class="again">Try again</button>
+    </div>
+  </section>
+
+  <section data-puzzle="roses">
+    <h2>2. Roses</h2>
+    <p>Here is a logical argument &ndash; two premises and a conclusion. Decide as quickly as you can
+       whether it is logically valid: does the conclusion follow from the premises? You have
+       <strong class="limit"></strong> seconds.</p>
+    <button class="start primary">Show the argument</button>
+
+    <div class="puzzle" hidden>
+      <div class="card">
+        <p>All roses are flowers.</p>
+        <p>Some flowers fade quickly.</p>
+        <p>Therefore some roses fade quickly.</p>
+      </div>
+      <div class="choices">
+        <button data-answer="valid">Valid</button>
+        <button data-answer="invalid">Not valid</button>
+        <span class="countdown"></span>
+      </div>
+    </div>
+
+    <div class="explanation" hidden>
+      <p class="verdict"></p>
+      <p>A large majority of college students endorse this syllogism as valid. In fact the argument is
+         flawed, because it is possible that there are no roses among the flowers that fade quickly.</p>
+      <p>The conclusion may well be true &ndash; some roses probably do fade quickly &ndash; but it does
+         not follow from the premises. Just as in the bat-and-ball problem, a plausible answer comes to
+         mind immediately, and checking it would take effort.</p>
+      <button class="again">Try again</button>
+    </div>
+  </section>
 </main>
 
 <script>
 const TIME_LIMIT_SECONDS = 10;
-const INTUITIVE_CENTS = 10;
-const CORRECT_CENTS = 5;
-
-const el = Object.fromEntries(
-  ['limit', 'start', 'puzzle', 'form', 'answer', 'countdown', 'explanation', 'verdict', 'again']
-    .map(id => [id, document.getElementById(id)])
-);
-
-let timer;
-let shownAt;
 
 // Reads "5", "5c", "5¢", "0.05" or "$0.05" as cents; a decimal point or $ means dollars.
 function parseCents(text) {
@@ -128,52 +157,77 @@ function parseCents(text) {
   return Math.round(isDollars ? number * 100 : number);
 }
 
-function verdictFor(cents, seconds) {
-  if (cents === undefined) return { text: 'Time is up – no answer.', isRight: false };
-  const after = `after ${seconds.toFixed(1)} s`;
-  if (cents === CORRECT_CENTS) return { text: `You answered 5¢ ${after} – correct, well resisted!`, isRight: true };
-  if (cents === INTUITIVE_CENTS) return { text: `You answered 10¢ ${after} – like most people, and wrong.`, isRight: false };
-  return { text: `You answered ${cents}¢ ${after} – wrong.`, isRight: false };
+// Each puzzle turns an answer given after `after` (e.g. "after 2.3 s") into a verdict;
+// `answer` is undefined when time ran out.
+const VERDICTS = {
+  batAndBall(answer, after) {
+    const cents = answer === undefined ? undefined : parseCents(answer);
+    if (cents === undefined) return { text: 'Time is up – no answer.', isRight: false };
+    if (cents === 5) return { text: `You answered 5¢ ${after} – correct, well resisted!`, isRight: true };
+    if (cents === 10) return { text: `You answered 10¢ ${after} – like most people, and wrong.`, isRight: false };
+    return { text: `You answered ${cents}¢ ${after} – wrong.`, isRight: false };
+  },
+  roses(answer, after) {
+    if (answer === undefined) return { text: 'Time is up – no answer.', isRight: false };
+    if (answer === 'invalid') return { text: `You said not valid ${after} – correct, well resisted!`, isRight: true };
+    return { text: `You said valid ${after} – like most college students, and wrong.`, isRight: false };
+  },
+};
+
+function setUpPuzzle(section) {
+  const find = selector => section.querySelector(selector);
+  const verdictFor = VERDICTS[section.dataset.puzzle];
+  const input = find('input');
+  const answerControls = [...section.querySelectorAll('form button, [data-answer]')];
+  let timer;
+  let shownAt;
+
+  function finish(answer) {
+    clearInterval(timer);
+    const seconds = Math.min((performance.now() - shownAt) / 1000, TIME_LIMIT_SECONDS);
+    const { text, isRight } = verdictFor(answer, `after ${seconds.toFixed(1)} s`);
+    const verdict = find('.verdict');
+    verdict.textContent = text;
+    verdict.className = `verdict ${isRight ? 'good' : 'bad'}`;
+    if (input) input.disabled = true;
+    answerControls.forEach(control => { control.disabled = true; });
+    find('.countdown').textContent = '';
+    find('.explanation').hidden = false;
+  }
+
+  function updateCountdown() {
+    const left = TIME_LIMIT_SECONDS - (performance.now() - shownAt) / 1000;
+    if (left <= 0) return finish();
+    find('.countdown').textContent = `${Math.ceil(left)} s left`;
+  }
+
+  function show() {
+    find('.start').hidden = true;
+    find('.explanation').hidden = true;
+    find('.puzzle').hidden = false;
+    answerControls.forEach(control => { control.disabled = false; });
+    if (input) {
+      input.value = '';
+      input.disabled = false;
+      input.focus();
+    }
+    shownAt = performance.now();
+    updateCountdown();
+    timer = setInterval(updateCountdown, 100);
+  }
+
+  find('.limit').textContent = TIME_LIMIT_SECONDS;
+  find('.start').addEventListener('click', show);
+  find('.again').addEventListener('click', show);
+  find('form')?.addEventListener('submit', event => {
+    event.preventDefault();
+    finish(input.value);
+  });
+  section.querySelectorAll('[data-answer]').forEach(button =>
+    button.addEventListener('click', () => finish(button.dataset.answer)));
 }
 
-function finish() {
-  clearInterval(timer);
-  const seconds = (performance.now() - shownAt) / 1000;
-  const { text, isRight } = verdictFor(parseCents(el.answer.value), Math.min(seconds, TIME_LIMIT_SECONDS));
-  el.verdict.textContent = text;
-  el.verdict.className = `verdict ${isRight ? 'good' : 'bad'}`;
-  el.answer.disabled = true;
-  el.form.querySelector('button').hidden = true;
-  el.countdown.textContent = '';
-  el.explanation.hidden = false;
-}
-
-function updateCountdown() {
-  const left = TIME_LIMIT_SECONDS - (performance.now() - shownAt) / 1000;
-  if (left <= 0) return finish();
-  el.countdown.textContent = `${Math.ceil(left)} s left`;
-}
-
-function showPuzzle() {
-  el.start.hidden = true;
-  el.explanation.hidden = true;
-  el.puzzle.hidden = false;
-  el.answer.value = '';
-  el.answer.disabled = false;
-  el.form.querySelector('button').hidden = false;
-  el.answer.focus();
-  shownAt = performance.now();
-  updateCountdown();
-  timer = setInterval(updateCountdown, 100);
-}
-
-el.limit.textContent = TIME_LIMIT_SECONDS;
-el.start.addEventListener('click', showPuzzle);
-el.again.addEventListener('click', showPuzzle);
-el.form.addEventListener('submit', event => {
-  event.preventDefault();
-  finish();
-});
+document.querySelectorAll('[data-puzzle]').forEach(setUpPuzzle);
 </script>
 </body>
 </html>
