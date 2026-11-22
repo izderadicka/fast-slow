@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bat and ball</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f4ef;
+    --text: #22201c;
+    --muted: #6f6a60;
+    --card: #ffffff;
+    --border: #d9d4c8;
+    --accent: #b4521e;
+    --good: #2e7d32;
+    --bad: #c62828;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1a18;
+      --text: #ece8df;
+      --muted: #a09a8d;
+      --card: #262421;
+      --border: #3d3a34;
+      --accent: #f0935c;
+      --good: #7cc47f;
+      --bad: #ef7f7f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 48px;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, sans-serif;
+  }
+  main { max-width: 560px; margin: 0 auto; }
+  .back { display: inline-block; margin-bottom: 12px; color: var(--accent); text-decoration: none; }
+  .back:hover, .back:focus-visible { text-decoration: underline; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin: 20px 0;
+    padding: 20px;
+    font-size: 1.15rem;
+  }
+  .card p:last-child { margin-bottom: 0; }
+  form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }
+  input, button {
+    font: inherit;
+    color: inherit;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+  }
+  input { width: 8em; }
+  button { cursor: pointer; padding: 8px 18px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+  .countdown { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .verdict { font-weight: 600; font-size: 1.1rem; }
+  .verdict.good { color: var(--good); }
+  .verdict.bad { color: var(--bad); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="index.html">&larr; All exercises</a>
+  <h1>Bat and ball</h1>
+  <p class="muted">From <em>Thinking, Fast and Slow</em>, chapter 3 &ndash; an answer that is intuitive,
+     appealing, and wrong.</p>
+  <p>Do not try to solve the puzzle &ndash; listen to your intuition. You have
+     <strong id="limit"></strong> seconds to type the first answer that comes to mind.</p>
+  <button id="start" class="primary">Show the puzzle</button>
+
+  <div id="puzzle" hidden>
+    <div class="card">
+      <p>A bat and ball cost $1.10.</p>
+      <p>The bat costs one dollar more than the ball.</p>
+      <p>How much does the ball cost?</p>
+    </div>
+    <form id="form">
+      <label>The ball costs <input id="answer" autocomplete="off" inputmode="decimal" placeholder="cents"></label>
+      <button class="primary">Answer</button>
+      <span id="countdown" class="countdown"></span>
+    </form>
+  </div>
+
+  <div id="explanation" hidden>
+    <p id="verdict" class="verdict"></p>
+    <p>A number came to your mind. The number, of course, is 10: 10¢. The distinctive mark of this
+       easy puzzle is that it evokes an answer that is intuitive, appealing, and wrong.</p>
+    <p>Do the math: if the ball costs 10¢, the bat costs $1.10 and the total is $1.20, not $1.10.
+       The correct answer is <strong>5¢</strong> &ndash; the bat then costs $1.05, one dollar more,
+       and together they cost $1.10.</p>
+    <p class="muted">The quick answer comes from System 1. Checking it takes only a moment of
+       System 2, yet most people &ndash; including many students at top universities &ndash; do not
+       make that small effort.</p>
+    <button id="again">Try again</button>
+  </div>
+</main>
+
+<script>
+const TIME_LIMIT_SECONDS = 10;
+const INTUITIVE_CENTS = 10;
+const CORRECT_CENTS = 5;
+
+const el = Object.fromEntries(
+  ['limit', 'start', 'puzzle', 'form', 'answer', 'countdown', 'explanation', 'verdict', 'again']
+    .map(id => [id, document.getElementById(id)])
+);
+
+let timer;
+let shownAt;
+
+// Reads "5", "5c", "5¢", "0.05" or "$0.05" as cents; a decimal point or $ means dollars.
+function parseCents(text) {
+  const number = Number.parseFloat(text.replace(/[^\d.]/g, ''));
+  if (Number.isNaN(number)) return undefined;
+  const isDollars = /[.$]/.test(text);
+  return Math.round(isDollars ? number * 100 : number);
+}
+
+function verdictFor(cents, seconds) {
+  if (cents === undefined) return { text: 'Time is up – no answer.', isRight: false };
+  const after = `after ${seconds.toFixed(1)} s`;
+  if (cents === CORRECT_CENTS) return { text: `You answered 5¢ ${after} – correct, well resisted!`, isRight: true };
+  if (cents === INTUITIVE_CENTS) return { text: `You answered 10¢ ${after} – like most people, and wrong.`, isRight: false };
+  return { text: `You answered ${cents}¢ ${after} – wrong.`, isRight: false };
+}
+
+function finish() {
+  clearInterval(timer);
+  const seconds = (performance.now() - shownAt) / 1000;
+  const { text, isRight } = verdictFor(parseCents(el.answer.value), Math.min(seconds, TIME_LIMIT_SECONDS));
+  el.verdict.textContent = text;
+  el.verdict.className = `verdict ${isRight ? 'good' : 'bad'}`;
+  el.answer.disabled = true;
+  el.form.querySelector('button').hidden = true;
+  el.countdown.textContent = '';
+  el.explanation.hidden = false;
+}
+
+function updateCountdown() {
+  const left = TIME_LIMIT_SECONDS - (performance.now() - shownAt) / 1000;
+  if (left <= 0) return finish();
+  el.countdown.textContent = `${Math.ceil(left)} s left`;
+}
+
+function showPuzzle() {
+  el.start.hidden = true;
+  el.explanation.hidden = true;
+  el.puzzle.hidden = false;
+  el.answer.value = '';
+  el.answer.disabled = false;
+  el.form.querySelector('button').hidden = false;
+  el.answer.focus();
+  shownAt = performance.now();
+  updateCountdown();
+  timer = setInterval(updateCountdown, 100);
+}
+
+el.limit.textContent = TIME_LIMIT_SECONDS;
+el.start.addEventListener('click', showPuzzle);
+el.again.addEventListener('click', showPuzzle);
+el.form.addEventListener('submit', event => {
+  event.preventDefault();
+  finish();
+});
+</script>
+</body>
+</html>
