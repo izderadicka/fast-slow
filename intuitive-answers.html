@@ -102,14 +102,16 @@
 
     <div class="explanation" hidden>
       <p class="verdict"></p>
-      <p>A number came to your mind. The number, of course, is 10: 10¢. The distinctive mark of this
-         easy puzzle is that it evokes an answer that is intuitive, appealing, and wrong.</p>
-      <p>Do the math: if the ball costs 10¢, the bat costs $1.10 and the total is $1.20, not $1.10.
-         The correct answer is <strong>5¢</strong> &ndash; the bat then costs $1.05, one dollar more,
-         and together they cost $1.10.</p>
-      <p class="muted">The quick answer comes from System 1. Checking it takes only a moment of
-         System 2, yet most people &ndash; including many students at top universities &ndash; do not
-         make that small effort.</p>
+      <div class="solution">
+        <p>A number came to your mind. The number, of course, is 10: 10¢. The distinctive mark of this
+           easy puzzle is that it evokes an answer that is intuitive, appealing, and wrong.</p>
+        <p>Do the math: if the ball costs 10¢, the bat costs $1.10 and the total is $1.20, not $1.10.
+           The correct answer is <strong>5¢</strong> &ndash; the bat then costs $1.05, one dollar more,
+           and together they cost $1.10.</p>
+        <p class="muted">The quick answer comes from System 1. Checking it takes only a moment of
+           System 2, yet most people &ndash; including many students at top universities &ndash; do not
+           make that small effort.</p>
+      </div>
       <button class="again">Try again</button>
     </div>
   </section>
@@ -136,11 +138,13 @@
 
     <div class="explanation" hidden>
       <p class="verdict"></p>
-      <p>A large majority of college students endorse this syllogism as valid. In fact the argument is
-         flawed, because it is possible that there are no roses among the flowers that fade quickly.</p>
-      <p>The conclusion may well be true &ndash; some roses probably do fade quickly &ndash; but it does
-         not follow from the premises. Just as in the bat-and-ball problem, a plausible answer comes to
-         mind immediately, and checking it would take effort.</p>
+      <div class="solution">
+        <p>A large majority of college students endorse this syllogism as valid. In fact the argument is
+           flawed, because it is possible that there are no roses among the flowers that fade quickly.</p>
+        <p>The conclusion may well be true &ndash; some roses probably do fade quickly &ndash; but it does
+           not follow from the premises. Just as in the bat-and-ball problem, a plausible answer comes to
+           mind immediately, and checking it would take effort.</p>
+      </div>
       <button class="again">Try again</button>
     </div>
   </section>
@@ -161,8 +165,8 @@ function parseCents(text) {
 // `answer` is undefined when time ran out.
 const VERDICTS = {
   batAndBall(answer, after) {
-    const cents = answer === undefined ? undefined : parseCents(answer);
-    if (cents === undefined) return { text: 'Time is up – no answer.', isRight: false };
+    if (answer === undefined) return { text: 'Time is up – no answer.', isRight: false };
+    const cents = parseCents(answer);
     if (cents === 5) return { text: `You answered 5¢ ${after} – correct, well resisted!`, isRight: true };
     if (cents === 10) return { text: `You answered 10¢ ${after} – like most people, and wrong.`, isRight: false };
     return { text: `You answered ${cents}¢ ${after} – wrong.`, isRight: false };
@@ -192,6 +196,8 @@ function setUpPuzzle(section) {
     if (input) input.disabled = true;
     answerControls.forEach(control => { control.disabled = true; });
     find('.countdown').textContent = '';
+    // Without an answer the solution stays hidden, so the puzzle can still be tried for real.
+    find('.solution').hidden = answer === undefined;
     find('.explanation').hidden = false;
   }
 
@@ -221,6 +227,8 @@ function setUpPuzzle(section) {
   find('.again').addEventListener('click', show);
   find('form')?.addEventListener('submit', event => {
     event.preventDefault();
+    // Something that is not an amount is not an answer yet; keep the clock running.
+    if (parseCents(input.value) === undefined) return input.focus();
     finish(input.value);
   });
   section.querySelectorAll('[data-answer]').forEach(button =>
